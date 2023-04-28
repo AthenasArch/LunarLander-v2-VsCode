@@ -1,7 +1,13 @@
+# adjuste from athenasarch
 import sys
 import pygame
 import gym
 from pygame.locals import *
+import gym
+from stable_baselines3.common.vec_env import DummyVecEnv
+# from stable_baselines3.common.env_util import make_vec_env
+
+# from huggingface_sb3 import package_to_hub
 
 # Defina MANUAL_CONTROL como True para controle manual e False para IA
 MANUAL_CONTROL = True
