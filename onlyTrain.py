@@ -95,7 +95,7 @@ if __name__ == "__main__":
     main()
 
 
-
+# ************************************************************************************************************
 
 #sobre acelerar o treinamento:
 
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
 
 
-
+# ************************************************************************************************************
 
 # O progresso que aparece na tela é uma medida do progresso do treinamento, expresso como uma
 #   porcentagem. Ele vai de 0% a 100%. O progresso é calculado com base no número atual de passos
@@ -136,7 +136,7 @@ if __name__ == "__main__":
 #   do jogo pode tornar o treinamento mais lento, então você deve encontrar um equilíbrio entre a 
 #   frequência de renderização e a velocidade de treinamento.
 
-
+# ************************************************************************************************************
 
 # A explicacao generica sobre o algoritmo:
 
@@ -147,6 +147,8 @@ if __name__ == "__main__":
 #   agente no ambiente. O PPO é um algoritmo de aprendizado por reforço de política, o que significa que 
 #   ele otimiza diretamente a política, em vez de aprender uma função de valor e derivar a política a 
 #   partir dela.
+
+# ************************************************************************************************************
 
 # Para aplicar esse algoritmo a outros jogos, você precisará seguir os passos abaixo:
 

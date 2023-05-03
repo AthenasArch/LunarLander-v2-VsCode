@@ -1,3 +1,5 @@
+# From Leonardo by AthenasArch
+
 import sys
 import pygame
 from pygame.locals import *
@@ -15,6 +17,11 @@ from huggingface_hub import login
 from stable_baselines3.common.evaluation import evaluate_policy
 from tkinter import PhotoImage
 from PIL import Image, ImageTk
+import csv
+import matplotlib.pyplot as plt
+import os
+
+learning_data = []
 
 def print_final_position(observation):
 
@@ -36,16 +43,58 @@ def print_final_position(observation):
     print("perna esquerda tocou a terra. = ", left_leg_contact)
     print("perna direita tocou a terra...= ", right_leg_contact)
 
+def save_learning_data(file_name):
+    with open(file_name, "w", newline="") as csvfile:
+        fieldnames = ["progress", "mean_reward"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for data in learning_data:
+            writer.writerow(data)
+
+# carrega modelo treinado anteriormente
+def load_pretrained_model(model_name):
+    try:
+        loaded_model = PPO.load(model_name)
+        return loaded_model
+    except FileNotFoundError:
+        return None
+
+# compara o modelo treinado anteriormente com o novo para ver se houve melhoria
+def compare_models(model, model_name):
+    pretrained_model = load_pretrained_model(model_name)
+    if pretrained_model:
+        pretrained_reward = evaluate_current_model(pretrained_model)
+        new_reward = evaluate_current_model(model)
+        if new_reward > pretrained_reward:
+            return True
+        else:
+            return False
+    else:
+        return True  # Se não houver modelo pré-treinado, consideramos o novo modelo como melhor
+
+
 # Define a função 'train_model' para treinar o agente
-def train_model(progress_text, render_training = False):
+def train_model(progress_text, evaluation_var, improvement_var, render_training = False):
 
     # Define algumas variáveis de configuração
     env_id = "LunarLander-v2"  # Identificador do ambiente Gym
-    my_model_name = "ppo-LunarLander-v2"
-    model_architecture = "PPO"  # Nome do algoritmo de aprendizado por reforço
-    repo_id = "seu_usuario/ppo-LunarLander-v2"  # Identificador do repositório Hugging Face Hub
+    my_model_name = "ppo-LunarLander-v2" # o nome do modelo treinado a ser salvo
+    model_architecture = "PPO"  # Nome do tipo algoritmo de aprendizado por reforço
+    repo_user_name = os.environ.get("LUNARLANDER_REPO_ID")
+    if repo_user_name is not None:
+        repo_id = repo_user_name + "/ppo-LunarLander-v2"  # Identificador do repositório Hugging Face Hub
+    else:
+        repo_id = None
     commit_message = "Upload PPO LunarLander-v2 trained agent"  # Mensagem de commit para o Hugging Face Hub
-    token = "seu_token" # coloque seu toke aqui
+    huggingface_token = os.environ.get("HUGGINGFACE_TOKEN")
+    token = huggingface_token # coloque seu toke aqui
+    print("\r\nYour Repo  ID: ", repo_user_name)
+    print("\r\nYour Token ID: ", token)
+
+
+    # HUGGINGFACE_TOKEN
+    # LUNARLANDER_REPO_ID
 
     # Autenticar com o Hugging Face Hub
     login(token)
@@ -73,9 +122,9 @@ def train_model(progress_text, render_training = False):
     )
 
     # Define o número total de passos de tempo para o treinamento e a frequência de atualização do progresso
-    total_timesteps = 1000000 # quantidade de vezes que sera treinado 1M vezes treinado
-    current_timesteps = 0
-    update_interval = 10000 
+    total_timesteps = 4000000 # quantidade de vezes que sera treinado 1M vezes treinado
+    current_timesteps = 0 # somador do passo atual
+    update_interval = 10000 # tempo para calculo percentual e rederizacao do treinamento
 
     # Loop principal de treinamento
     while current_timesteps < total_timesteps:
@@ -85,10 +134,19 @@ def train_model(progress_text, render_training = False):
         # Atualiza a contagem de passos de tempo
         current_timesteps += update_interval
 
+        # Avalia o modelo treinado
+        mean_reward, std_reward = evaluate_policy(model, DummyVecEnv([lambda: gym.make(env_id)]), n_eval_episodes=5, deterministic=True)
+
+        # Armazena a recompensa média e o progresso atual em uma lista
+        learning_data.append({"progress": current_timesteps / total_timesteps, "mean_reward": mean_reward})
+
+        # Avalia o modelo atual e atualiza a variável de avaliação
+        mean_reward = evaluate_current_model(model)
+        evaluation_var.set(f"Recompensa média: {mean_reward:.2f}")
+
         # Atualiza a variável de progresso e mostra na interface do usuário
         progress = 100 * current_timesteps / total_timesteps
         progress_text.set(f"Progress: {progress:.2f}%")
-
 
         if(render_training):
             # Renderiza o ambiente de avaliação para visualizar o desempenho do agente
@@ -102,26 +160,65 @@ def train_model(progress_text, render_training = False):
     # Fecha o ambiente de avaliação
     eval_env.close()
 
-    # Salva o modelo treinado no diretório atual
-    model.save(my_model_name)
+    # Avalia o modelo atual e atualiza a variável de avaliação
+    mean_reward = evaluate_current_model(model)
+    evaluation_var.set(f"Recompensa média: {mean_reward:.2f}")
 
-    # Envia o modelo treinado para o Hugging Face Hub
-    package_to_hub(
-        model=model,  # Our trained model
-        model_name=my_model_name,  # The name of our trained model
-        model_architecture=model_architecture,  # The model architecture we used: in our case PPO
-        env_id=env_id,  # Name of the environment
-        eval_env=DummyVecEnv([lambda: gym.make(env_id)]),  # Evaluation Environment
-        repo_id=repo_id,  # id of the model repository from the Hugging Face Hub (repo_id = {organization}/{repo_name} for instance ThomasSimonini/ppo-LunarLander-v2
-        commit_message=commit_message,
-    )
+    if compare_models(model, my_model_name):
+        improvement_var.set("Melhoria no modelo treinado!")
+
+        # Salva o modelo treinado no diretório atual
+        model.save(my_model_name)
+
+        # Salva os dados de aprendizado em um arquivo CSV
+        save_learning_data("learning_data.csv")
+
+        # Envia o modelo treinado para o Hugging Face Hub
+        package_to_hub(
+            model=model,  # Our trained model
+            model_name=my_model_name,  # The name of our trained model
+            model_architecture=model_architecture,  # The model architecture we used: in our case PPO
+            env_id=env_id,  # Name of the environment
+            eval_env=DummyVecEnv([lambda: gym.make(env_id)]),  # Evaluation Environment
+            repo_id=repo_id,  # id of the model repository from the Hugging Face Hub (repo_id = {organization}/{repo_name} for instance ThomasSimonini/ppo-LunarLander-v2
+            commit_message=commit_message,
+        )
+    else:
+        improvement_var.set("O novo treinamento não foi melhor que o anterior")
+
+
 
 # Função para iniciar o treinamento em uma nova thread
-def start_training(progress_text, render_var):
+def start_training(progress_text, evaluation_var, improvement_var, render_var):
     # Cria uma nova thread para executar a função 'train_model' e passa 'progress_text' como argumento
-    train_thread = threading.Thread(target=train_model, args=(progress_text, render_var))
+    train_thread = threading.Thread(target=train_model, args=(progress_text, evaluation_var, improvement_var, render_var))
     # Inicia a thread
     train_thread.start()
+
+# aqui plotamos o grafico de aprendizado em funcao do percentual de tempo
+def plot_learning_graph():
+    progress = []
+    mean_reward = []
+
+    with open("learning_data.csv", "r") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            progress.append(float(row["progress"]))
+            mean_reward.append(float(row["mean_reward"]))
+
+    plt.plot(progress, mean_reward)
+    plt.xlabel("Progresso de Treinamento")
+    plt.ylabel("Recompensa Média")
+    plt.title("Gráfico de Aprendizado")
+    plt.show()
+
+# avalia o treinamento do agente durante a execucao do script
+def evaluate_current_model(model, n_eval_episodes=5):
+    eval_env = gym.make("LunarLander-v2")
+    mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=n_eval_episodes, deterministic=True)
+    eval_env.close()
+    return mean_reward
+
 
 # aqui vamos testar o agente treinado
 def evaluate_trained_agent():
@@ -211,7 +308,7 @@ def manual_control():
 def main():
 
     frame_x = 500
-    frame_y = 550
+    frame_y = 700
     # Cria a janela principal do tkinter
     root = tk.Tk()
     root.title("Lunar Lander")
@@ -237,6 +334,16 @@ def main():
     progress_label = tk.Label(frame, textvariable=progress_var)
     progress_label.pack(pady=10)
 
+    # Cria uma variável para exibir a recompensa média
+    evaluation_var = tk.StringVar()
+    evaluation_label = tk.Label(frame, textvariable=evaluation_var)
+    evaluation_label.pack(pady=10)
+
+    # Cria uma variável para exibir a mensagem de melhoria do modelo
+    improvement_var = tk.StringVar()
+    improvement_label = tk.Label(frame, textvariable=improvement_var)
+    improvement_label.pack(pady=10)
+
     # Cria um botão para iniciar o modo de controle manual
     manual_button = tk.Button(frame, text="Jogar manualmente", command=lambda: Process(target=manual_control).start(), width=20)
     manual_button.pack(pady=10)
@@ -247,13 +354,17 @@ def main():
     render_check.pack(pady=10)
 
     # Cria um botão para iniciar o treinamento do agente
-    start_button = tk.Button(frame, text="Treinar agente", command=lambda: start_training(progress_var, render_var.get()), width=20)
+    start_button = tk.Button(frame, text="Treinar agente", command=lambda: start_training(progress_var, evaluation_var, improvement_var, render_var.get()), width=20)
     start_button.pack(pady=10)
 
     # Cria um botão para testar o agente treinado
     test_button = tk.Button(frame, text="Testar agente treinado", command=lambda: evaluate_trained_agent(), width=20)
     test_button.pack(pady=10)
 
+    # Cria um botão para plotar o gráfico de aprendizado
+    plot_button = tk.Button(frame, text="Plotar gráfico de aprendizado", command=plot_learning_graph, width=20)
+    plot_button.pack(pady=10)
+    
     # Inicia o loop principal do tkinter
     root.mainloop()
 
@@ -261,3 +372,49 @@ def main():
 # Inicia o programa chamando a função 'main'
 if __name__ == "__main__":
     main()
+
+
+
+# policy: 
+#   O tipo de política a ser usada pelo agente. Neste caso, é uma política 
+# baseada em Multilayer Perceptron (MLP), que é uma arquitetura de rede neural 
+# feedforward.
+
+# env: 
+#   O ambiente do Gym no qual o agente será treinado. Neste caso, é a instância 
+# do ambiente Lunar Lander.
+
+# n_steps: 
+#   O número de etapas de interação (ciclo ação-observação) com o ambiente
+# que o agente coleta antes de atualizar os parâmetros da política. Um valor maior 
+# pode melhorar a estabilidade do treinamento, mas também aumenta o tempo necessário 
+# para cada atualização.
+
+# batch_size: 
+#   O tamanho do lote usado para atualizar os parâmetros da política. Um lote é um 
+# subconjunto de dados de interação (ações, observações, recompensas) usados para 
+# treinar a rede neural.
+
+# n_epochs: 
+#   O número de vezes que o algoritmo passa por todo o conjunto de dados 
+# (etapas de interação) durante o treinamento. Cada passagem completa pelos dados 
+# é chamada de época.
+
+# gamma: 
+#   O fator de desconto utilizado no cálculo da recompensa descontada acumulada. 
+# Um valor mais próximo de 1 indica que o agente leva mais em consideração as recompensas 
+# futuras, enquanto um valor mais baixo dá mais peso às recompensas imediatas.
+
+# gae_lambda: 
+#   O parâmetro lambda usado no cálculo da Generalized Advantage Estimation (GAE). 
+# A GAE é uma técnica usada para estimar a vantagem de uma ação, que é a diferença 
+# entre a recompensa acumulada esperada e a função valor do estado atual.
+
+# ent_coef: 
+#   Coeficiente de entropia usado para incentivar a exploração durante o treinamento. 
+# Um valor mais alto incentiva o agente a explorar mais o ambiente, enquanto um valor 
+# mais baixo o encoraja a explorar menos e se concentrar em ações conhecidas.
+
+# verbose: 
+#   Controla a quantidade de informações de depuração impressas durante o 
+# treinamento. Neste caso, o valor 1 indica que apenas informações básicas serão impressas.
