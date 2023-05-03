@@ -1,13 +1,16 @@
 ### :wolf: Olá, sou o Leonardo Hilgemberg, criador da AthenasArch.
 - Neste projeto vamos criar um agente para treinar o jogo LunarLander-V2, com o VsCode e Python no windows. Utilizaremos a API do jogo LunarLander da propria openAI, para não ter que reescrever todo o jogo.
 
+<p align="center">
+  <img src="https://github.com/AthenasArch/LunarLander-v2-VsCode/blob/acdadee44e02ba8ced11eedc245cb41ab8d508e0/img/lunar_lander_continuous.gif" alt="LunarLander GIF" width="300" />
+</p>
+
 ---
 
 Bibliotecas:
 - gym[box2D]: Contém o ambiente LunarLander-v2 🌛 (utilizei a versão gym==0.21)
 - stable-baselines3[extra]: A biblioteca de deep reinforcement learning.
 - huggingface_sb3: Código adicional para Stable-baselines3 para carregar e fazer upload de modelos do repositori Hugging Face 🤗 Hub.
-
 - A fonte dos estudos e práticas: https://simoninithomas.github.io/deep-rl-course/ 
 
 ---
